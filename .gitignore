@@ -1,6 +1,7 @@
 # IDE
 .idea/
 .vscode/
+inputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -144,3 +145,4 @@ grounding/version.py
 
 vis/
 tmp/
+.DS_Store

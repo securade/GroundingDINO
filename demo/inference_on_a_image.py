@@ -19,39 +19,51 @@ def plot_boxes_to_image(image_pil, tgt):
     labels = tgt["labels"]
     assert len(boxes) == len(labels), "boxes and labels must have same length"
 
-    draw = ImageDraw.Draw(image_pil)
+    # draw = ImageDraw.Draw(image_pil)
     mask = Image.new("L", image_pil.size, 0)
-    mask_draw = ImageDraw.Draw(mask)
+    # mask_draw = ImageDraw.Draw(mask)
+    
+    list_of_boxes = []
 
     # draw boxes and masks
     for box, label in zip(boxes, labels):
+        
+        x, y, ww, hh = box
+        x, y, ww, hh = float(x), float(y), float(ww), float(hh)
+        # print(x,y,ww,hh)
+        
         # from 0..1 to 0..W, 0..H
         box = box * torch.Tensor([W, H, W, H])
+        
         # from xywh to xyxy
         box[:2] -= box[2:] / 2
         box[2:] += box[:2]
         # random color
-        color = tuple(np.random.randint(0, 255, size=3).tolist())
+        # color = tuple(np.random.randint(0, 255, size=3).tolist())
         # draw
         x0, y0, x1, y1 = box
         x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+        
+        # print(x0,y0,x1,y1)
+        
+        # draw.rectangle([x0, y0, x1, y1], outline=color, width=6)
+        # # draw.text((x0, y0), str(label), fill=color)
 
-        draw.rectangle([x0, y0, x1, y1], outline=color, width=6)
-        # draw.text((x0, y0), str(label), fill=color)
+        # font = ImageFont.load_default()
+        # if hasattr(font, "getbbox"):
+        #     bbox = draw.textbbox((x0, y0), str(label), font)
+        # else:
+        #     w, h = draw.textsize(str(label), font)
+        #     bbox = (x0, y0, w + x0, y0 + h)
+        # # bbox = draw.textbbox((x0, y0), str(label))
+        # draw.rectangle(bbox, fill=color)
+        # draw.text((x0, y0), str(label), fill="white")
 
-        font = ImageFont.load_default()
-        if hasattr(font, "getbbox"):
-            bbox = draw.textbbox((x0, y0), str(label), font)
-        else:
-            w, h = draw.textsize(str(label), font)
-            bbox = (x0, y0, w + x0, y0 + h)
-        # bbox = draw.textbbox((x0, y0), str(label))
-        draw.rectangle(bbox, fill=color)
-        draw.text((x0, y0), str(label), fill="white")
-
-        mask_draw.rectangle([x0, y0, x1, y1], fill=255, width=6)
-
-    return image_pil, mask
+        # mask_draw.rectangle([x0, y0, x1, y1], fill=255, width=6)
+        # break
+        list_of_boxes.append((label,x,y,ww,hh))
+    print(list_of_boxes)
+    return image_pil, mask, list_of_boxes
 
 
 def load_image(image_path):
@@ -147,26 +159,71 @@ if __name__ == "__main__":
 
     # make dir
     os.makedirs(output_dir, exist_ok=True)
-    # load image
-    image_pil, image = load_image(image_path)
+    os.makedirs(output_dir+"labels/", exist_ok=True)
+    os.makedirs(output_dir+"images/", exist_ok=True)
+    
     # load model
     model = load_model(config_file, checkpoint_path, cpu_only=args.cpu_only)
+    
+    # load image
+    prompts = text_prompt.split(".")
+    if os.path.isdir(image_path):
+        i = 0
+        for file_path in os.listdir(image_path):
+            if not (file_path.endswith('.jpeg') or file_path.endswith('.jpg')):
+                continue
+            i += 1
+            image_pil, image = load_image(os.path.join(image_path+file_path))
+            # run model
+            boxes_filt, pred_phrases = get_grounding_output(
+                model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only
+            )
 
-    # visualize raw image
-    image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
+            # visualize pred
+            size = image_pil.size
+            pred_dict = {
+                "boxes": boxes_filt,
+                "size": [size[1], size[0]],  # H,W
+                "labels": pred_phrases,
+            }
+            # import ipdb; ipdb.set_trace()
+            image_with_box, _ , list_of_boxes = plot_boxes_to_image(image_pil, pred_dict)
+            # (x,y,ww,hh) = plot_boxes_to_image(image_pil, pred_dict)[2]
+            with open(os.path.join(output_dir+"labels/", "pred_"+ str(i) + ".txt"), 'w') as wf:
+                for (label,x,y,ww,hh) in list_of_boxes:
+                    l = label.split("(")[0]
+                    # save boxes in yolov7 format
+                    print(prompts)
+                    print(l)
+                    if l in prompts:
+                        num = prompts.index((label.split("(")[0]))
+                        wf.write(str(num) + " " + str(x) + " " + str(y) + " " + str(ww) + " " + str(hh) +"\n")
+                    
+            image_with_box.save(os.path.join(output_dir+"images/", "pred_"+ str(i) + ".jpg"))
+    else:
+        image_pil, image = load_image(image_path)
 
-    # run model
-    boxes_filt, pred_phrases = get_grounding_output(
-        model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only
-    )
+        # visualize raw image
+        image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
 
-    # visualize pred
-    size = image_pil.size
-    pred_dict = {
-        "boxes": boxes_filt,
-        "size": [size[1], size[0]],  # H,W
-        "labels": pred_phrases,
-    }
-    # import ipdb; ipdb.set_trace()
-    image_with_box = plot_boxes_to_image(image_pil, pred_dict)[0]
-    image_with_box.save(os.path.join(output_dir, "pred.jpg"))
+        # run model
+        boxes_filt, pred_phrases = get_grounding_output(
+            model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only
+        )
+
+        # visualize pred
+        size = image_pil.size
+        pred_dict = {
+            "boxes": boxes_filt,
+            "size": [size[1], size[0]],  # H,W
+            "labels": pred_phrases,
+        }
+        # import ipdb; ipdb.set_trace()
+        image_with_box, _ , list_of_boxes = plot_boxes_to_image(image_pil, pred_dict)
+        # (x,y,ww,hh) = plot_boxes_to_image(image_pil, pred_dict)[2]
+        with open(os.path.join(output_dir+"labels/", "pred_"+ str(i) + ".txt"), 'w') as wf:
+            for (label,x,y,ww,hh) in list_of_boxes:
+                # save boxes in yolov7 format
+                num = prompts.index(label.split("(")[0])
+                wf.write(str(num) + " " + str(x) + " " + str(y) + " " + str(ww) + " " + str(hh) +"\n")
+        image_with_box.save(os.path.join(output_dir, "pred.jpg"))
