@@ -1,10 +1,10 @@
-torch
-torchvision
+torch; platform_machine == 'x86_64'
+torchvision; platform_machine == 'x86_64'
 transformers
 addict
 yapf
 timm
 numpy
-opencv-python
-supervision==0.4.0
+opencv-python; platform_machine == 'x86_64'
+supervision==0.6.0
 pycocotools
