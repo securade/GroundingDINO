@@ -362,6 +362,7 @@ If you find our work helpful for your research, please consider citing the follo
 }
 ```
 
-
-
+```
+python demo/inference_on_a_image.py -c groundingdino/config/GroundingDINO_SwinB_cfg.py -p weights/groundingdino_swinb_cogcoor.pth -i ../Videos/20231006_144024_tp00003/final-frames/ -o ../Videos/20231006_144024_tp00003/output/ -t "worker at height.worker on ground." --box_threshold 0.25 --text_threshold 0.25
+```
 
